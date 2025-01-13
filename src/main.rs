@@ -1,15 +1,69 @@
 use std::env;
+use std::ops::RangeInclusive;
+use std::net::{TcpListener, TcpStream};
+use std::thread;
+use std::sync::mpsc;
+use std::time::Duration;
+use std::io::BufReader;
+use std::io::Read;
+use std::io::Write;
+use std::io::BufRead;
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
+    
+    let ports: Vec<i32> = get_ports_from_input();
+    let listeners: Vec<TcpListener> = bind_to_ports(ports);
 
+    let (tx, rx) = mpsc::channel();
+
+    for listener in listeners {
+        let txclone = tx.clone();
+        thread::spawn(move || {
+
+            let port = listener.local_addr().unwrap().port();
+
+            for stream in listener.incoming() {
+
+                let mut stream = match stream {
+                    Ok(s) => s,
+                    Err(_) => {
+                        continue;
+                    },
+                };
+
+                let mut buf_reader = BufReader::new(&stream);
+
+                let data: Vec<_> = buf_reader
+                    .lines()
+                    .map(|result| result.unwrap_or_else(|err| String::from("No data, could be a port scanner.")))
+                    .take_while(|line| !line.is_empty())
+                    .collect();
+
+                let _ = txclone.send(format!("Port: {}\n{data:#?}", port));
+
+            }
+
+
+        });
+    }
+
+    for message in rx {
+        println!("{}", message);
+    }
+
+}
+
+fn get_ports_from_input() -> Vec<i32> {
+
+    let args: Vec<String> = env::args().skip(1).collect();
     let mut ports: Vec<i32> = Vec::new();
 
-    if args.len() == 1 {
+    if args.len() == 0 {
         panic!("Specify ports or port ranges!");
     }
 
     for arg in args {
+
         let port = arg.trim().parse();
 
         match port {
@@ -17,17 +71,18 @@ fn main() {
                 ports.push(p);
                 continue;
             },
-            Err(_) => (),
+            Err(_) => {
+                for port in get_ports_from_range(&arg) {
+                    ports.push(port);
+                }
+            },
         }
-
     }
 
-    let (left, right) = get_ports_from_range(&String::from("829-62911"));
-
-    println!("{} {}", left, right);
+    ports
 }
 
-fn get_ports_from_range(s: &str) -> (i32, i32) {
+fn get_ports_from_range(s: &str) -> RangeInclusive<i32> {
     let mut left = 0;
     let mut right = 0;
 
@@ -46,6 +101,26 @@ fn get_ports_from_range(s: &str) -> (i32, i32) {
 
     port2 = s[left..right].parse().expect("Bad port range.");
 
-    (port1, port2)
+    port1..=port2
 
+}
+
+fn bind_to_ports(port_list: Vec<i32>) -> Vec<TcpListener> {
+    let mut ret: Vec<TcpListener> = Vec::new();
+
+    for port in port_list {
+        let listener = TcpListener::bind(format!("0.0.0.0:{}", port));
+        
+        match listener {
+            Ok(i) => {
+                ret.push(i);
+                println!("Bound to port {}", port);
+            },
+            Err(_) => {
+                println!("Could not bind to port {}", port);
+            },
+        }
+    }
+
+    ret
 }
