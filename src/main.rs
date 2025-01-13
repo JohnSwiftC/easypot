@@ -1,13 +1,11 @@
-use std::env;
-use std::ops::RangeInclusive;
-use std::net::{TcpListener, TcpStream};
-use std::thread;
-use std::sync::mpsc;
-use std::time::Duration;
-use std::io::BufReader;
-use std::io::Read;
-use std::io::Write;
-use std::io::BufRead;
+use std::{
+    env,
+    thread,
+    sync::mpsc,
+    ops::RangeInclusive,
+    net::TcpListener,
+    io::{BufReader, BufRead},
+};
 
 fn main() {
     
@@ -24,18 +22,18 @@ fn main() {
 
             for stream in listener.incoming() {
 
-                let mut stream = match stream {
+                let stream = match stream {
                     Ok(s) => s,
                     Err(_) => {
                         continue;
                     },
                 };
 
-                let mut buf_reader = BufReader::new(&stream);
+                let buf_reader = BufReader::new(&stream);
 
                 let data: Vec<_> = buf_reader
                     .lines()
-                    .map(|result| result.unwrap_or_else(|err| String::from("No data, could be a port scanner.")))
+                    .map(|result| result.unwrap_or_else(|_err| String::from("No data, could be a port scanner.")))
                     .take_while(|line| !line.is_empty())
                     .collect();
 
@@ -87,7 +85,7 @@ fn get_ports_from_range(s: &str) -> RangeInclusive<i32> {
     let mut right = 0;
 
     let mut port1: i32 = -1;
-    let mut port2: i32 = -1;
+    let port2: i32;
 
     for c in s.chars() {
         if c == '-' {
