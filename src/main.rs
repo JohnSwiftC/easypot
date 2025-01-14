@@ -66,6 +66,11 @@ fn create_threads(listeners: Vec<TcpListener>, message_stack: Arc<Mutex<Vec<Stri
                     },
                 };
 
+                let remote_ip = match stream.peer_addr() {
+                    Ok(addr) => addr.to_string(),
+                    Err(_) => String::from("Unidentified"),
+                };
+
                 let buf_reader = BufReader::new(&stream);
 
                 let data: Vec<_> = buf_reader
@@ -75,7 +80,7 @@ fn create_threads(listeners: Vec<TcpListener>, message_stack: Arc<Mutex<Vec<Stri
                     .collect();
 
                 let mut message_stack = message_stack_arc.lock().unwrap();
-                message_stack.push(format!("Port: {}\n{data:#?}", port));
+                message_stack.push(format!("Port: {} Remote IP: {}\n{data:#?}", port, remote_ip));
 
             }
 
@@ -84,7 +89,9 @@ fn create_threads(listeners: Vec<TcpListener>, message_stack: Arc<Mutex<Vec<Stri
 }
 
 fn read_no_file(message_stack_arc: Arc<Mutex<Vec<String>>>) {
+
     loop {
+
         let mut message_stack = message_stack_arc.lock().unwrap();
         
         let message = message_stack.pop();
