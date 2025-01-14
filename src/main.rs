@@ -1,7 +1,7 @@
 use std::{
     env,
     thread,
-    sync::mpsc,
+    sync::{mpsc, Arc, Mutex},
     ops::RangeInclusive,
     net::TcpListener,
     io::{BufReader, BufRead, Write, ErrorKind, Error},
@@ -13,19 +13,19 @@ fn main() {
     
     let ports: Vec<i32> = get_ports_from_input();
     let listeners: Vec<TcpListener> = bind_to_ports(ports);
-    let (tx, rx) = mpsc::channel::<String>();
+    let message_stack: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
 
-    create_threads(listeners, tx);
+    create_threads(listeners, tx, Arc::clone(&message_stack));
 
     let file = make_log_file();
 
     match file {
         Ok(f) => {
-            read_rx_file(rx, f);
+            read_file(f, Arc::clone(&message_stack));
         },
         Err(_) => {
             println!("Failed to create logging file, logging disabled.");
-            read_rx_no_file(rx);
+            read_no_file(rx);
         },
     }
 
@@ -50,11 +50,12 @@ fn make_log_file() -> Result<File, Error> {
     }
 }
 
-fn create_threads(listeners: Vec<TcpListener>, tx: mpsc::Sender<String>) {
+fn create_threads(listeners: Vec<TcpListener>, message_stack: Arc<Mutex<Vec<String>>>) {
     for listener in listeners {
-        let txclone = tx.clone();
+        let m_stack_inter = Arc::clone(&message_stack);
         thread::spawn(move || {
 
+            let message_stack_arc = m_stack_inter;
             let port = listener.local_addr().unwrap().port();
 
             for stream in listener.incoming() {
@@ -74,7 +75,8 @@ fn create_threads(listeners: Vec<TcpListener>, tx: mpsc::Sender<String>) {
                     .take_while(|line| !line.is_empty())
                     .collect();
 
-                let _ = txclone.send(format!("Port: {}\n{data:#?}", port));
+                let mut message_stack = message_stack_arc.lock().unwrap();
+                message_stack.push(format!("Port: {}\n{data:#?}", port));
 
             }
 
@@ -82,23 +84,43 @@ fn create_threads(listeners: Vec<TcpListener>, tx: mpsc::Sender<String>) {
     }
 }
 
-fn read_rx_no_file(rx: mpsc::Receiver<String>) {
-    for message in rx {
+fn read_no_file(message_stack_arc: Arc<Mutex<Vec<String>>>) {
+    loop {
+        let mut message_stack = message_stack_arc.lock.unwrap();
+        
+        let message = message_stack.pop();
+
+        let message = match message {
+            Some(val) => val,
+            None => continue,
+        };
+
         println!("{}", message);
     }
 }
 
-fn read_rx_file<T: Display>(rx: mpsc::Receiver<T>, mut file: File) {
-    for message in rx {
-        println!("{}", message);
+fn read_file(mut file: File, message_stack_arc: Arc<Mutex<Vec<String>>>) {
+    loop {
+
+        let mut message_stack = message_stack_arc.lock().unwrap();
+
+        let message = message_stack.pop();
+
+        let message = match message {
+            Some(val) => val,
+            None => continue,
+        };
 
         let res = file.write_all(
             format!("{}\n\n", message).as_bytes()
         );
 
+        println!("{}", message);
+
         if let Err(_) = res {
             println!("Failed to write a line to file!");
         }
+
     }
 }
 
