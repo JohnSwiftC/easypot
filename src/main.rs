@@ -1,12 +1,11 @@
 use std::{
     env,
     thread,
-    sync::{mpsc, Arc, Mutex},
+    sync::{Arc, Mutex},
     ops::RangeInclusive,
     net::TcpListener,
     io::{BufReader, BufRead, Write, ErrorKind, Error},
     fs::File,
-    fmt::Display,
 };
 
 fn main() {
@@ -15,7 +14,7 @@ fn main() {
     let listeners: Vec<TcpListener> = bind_to_ports(ports);
     let message_stack: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
 
-    create_threads(listeners, tx, Arc::clone(&message_stack));
+    create_threads(listeners, Arc::clone(&message_stack));
 
     let file = make_log_file();
 
@@ -25,7 +24,7 @@ fn main() {
         },
         Err(_) => {
             println!("Failed to create logging file, logging disabled.");
-            read_no_file(rx);
+            read_no_file(Arc::clone(&message_stack));
         },
     }
 
@@ -86,7 +85,7 @@ fn create_threads(listeners: Vec<TcpListener>, message_stack: Arc<Mutex<Vec<Stri
 
 fn read_no_file(message_stack_arc: Arc<Mutex<Vec<String>>>) {
     loop {
-        let mut message_stack = message_stack_arc.lock.unwrap();
+        let mut message_stack = message_stack_arc.lock().unwrap();
         
         let message = message_stack.pop();
 
