@@ -191,7 +191,6 @@ fn bind_to_ports(port_list: Vec<i32>) -> Vec<TcpListener> {
         match listener {
             Ok(i) => {
                 ret.push(i);
-                println!("Bound to port {}", port);
             },
             Err(_) => {
                 println!("Could not bind to port {}", port);
