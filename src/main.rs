@@ -4,7 +4,8 @@ use std::{
     sync::mpsc,
     ops::RangeInclusive,
     net::TcpListener,
-    io::{BufReader, BufRead},
+    io::{BufReader, BufRead, Write},
+    fs::File,
 };
 
 fn main() {
@@ -45,8 +46,12 @@ fn main() {
         });
     }
 
+    let mut file = File::create("simplepotlog.txt").expect("Failed to create log file.");
+
     for message in rx {
         println!("{}", message);
+
+        file.write_all(message.as_bytes()).expect("Could not write to file!");
     }
 
 }
