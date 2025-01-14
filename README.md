@@ -5,7 +5,18 @@ Outputs all findings and any related data to the terminal and a log file.
 
 # Build
 
-Ensure that you have Rust installed, then build with `cargo build --release` after cloning. Then navigate to `/target/release` to run.
+Ensure that you have Rust installed!
+
+> You may also need to update your rust with `rustup update`
+
+Run the following commands (or don't, you probably know what you're doing.)
+
+`git clone https://github.com/JohnSwiftC/easypot.git`
+`cd easypot`
+`cargo build --release`
+`cd target/release`
+
+You will see the executable in that file. Alternatively, do `cargo run -- *args*` to run without building.
 
 # Usage
 
