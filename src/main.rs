@@ -4,17 +4,53 @@ use std::{
     sync::mpsc,
     ops::RangeInclusive,
     net::TcpListener,
-    io::{BufReader, BufRead, Write},
+    io::{BufReader, BufRead, Write, ErrorKind, Error},
     fs::File,
+    fmt::Display,
 };
 
 fn main() {
     
     let ports: Vec<i32> = get_ports_from_input();
     let listeners: Vec<TcpListener> = bind_to_ports(ports);
+    let (tx, rx) = mpsc::channel::<String>();
 
-    let (tx, rx) = mpsc::channel();
+    create_threads(listeners, tx);
 
+    let file = make_log_file();
+
+    match file {
+        Ok(f) => {
+            read_rx_file(rx, f);
+        },
+        Err(_) => {
+            println!("Failed to create logging file, logging disabled.");
+            read_rx_no_file(rx);
+        },
+    }
+
+}
+
+fn make_log_file() -> Result<File, Error> {
+    let mut log_iter = 1;
+    loop {
+        match File::create_new(format!("easypotlog-{}.txt", log_iter)) {
+            Ok(f) => {
+                return Ok(f);
+            },
+            Err(e) => {
+                if e.kind() == ErrorKind::AlreadyExists {
+                    log_iter += 1;
+                    continue;
+                } else {
+                    return Err(e);
+                }
+            },
+        } 
+    }
+}
+
+fn create_threads(listeners: Vec<TcpListener>, tx: mpsc::Sender<String>) {
     for listener in listeners {
         let txclone = tx.clone();
         thread::spawn(move || {
@@ -34,7 +70,7 @@ fn main() {
 
                 let data: Vec<_> = buf_reader
                     .lines()
-                    .map(|result| result.unwrap_or_else(|_err| String::from("No data, could be a port scanner.")))
+                    .map(|result| result.unwrap_or_else(|_err| String::from("Bad data, likely a port scanner.")))
                     .take_while(|line| !line.is_empty())
                     .collect();
 
@@ -42,18 +78,28 @@ fn main() {
 
             }
 
-
         });
     }
+}
 
-    let mut file = File::create("simplepotlog.txt").expect("Failed to create log file.");
+fn read_rx_no_file(rx: mpsc::Receiver<String>) {
+    for message in rx {
+        println!("{}", message);
+    }
+}
 
+fn read_rx_file<T: Display>(rx: mpsc::Receiver<T>, mut file: File) {
     for message in rx {
         println!("{}", message);
 
-        file.write_all(message.as_bytes()).expect("Could not write to file!");
-    }
+        let res = file.write_all(
+            format!("{}\n\n", message).as_bytes()
+        );
 
+        if let Err(_) = res {
+            println!("Failed to write a line to file!");
+        }
+    }
 }
 
 fn get_ports_from_input() -> Vec<i32> {
