@@ -1,6 +1,6 @@
 # EasyPot
 
-A simple port-scanner / scraper honeypot built with rust!
+A simple port-scanner / scraper honeypot built with Rust!
 Outputs all findings and any related data to the terminal and a log file.
 
 # Build
@@ -24,4 +24,4 @@ Syntax is simple! Specify ports or port ranges (`4300`, `10000-10032`) in the co
 
 # Logging
 
-All finding will be output to a log file in the same directory, numbered in order from 1.
+All findings will be output to a log file in the same directory, numbered in order from 1.
