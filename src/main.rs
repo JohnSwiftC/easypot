@@ -6,6 +6,7 @@ use std::{
     net::TcpListener,
     io::{BufReader, BufRead, Write, ErrorKind, Error},
     fs::File,
+    collections::HashMap,
 };
 
 fn main() {
@@ -13,14 +14,16 @@ fn main() {
     let ports: Vec<i32> = get_ports_from_input();
     let listeners: Vec<TcpListener> = bind_to_ports(ports);
     let message_stack: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let ip_addr_freq: Arc<Mutex<HashMap<String, u32>>> = Arc::new(Mutex::new(HashMap::new()));
 
-    create_threads(listeners, Arc::clone(&message_stack));
+    create_threads(listeners, Arc::clone(&message_stack), Arc::clone(&ip_addr_freq));
 
-    let file = make_log_file();
+    let file = make_log_file("easypotlog");
+    let ipfile = make_log_file("easypotfreq");
 
     match file {
         Ok(f) => {
-            read_file(f, Arc::clone(&message_stack));
+            read_file(f, ipfile, Arc::clone(&message_stack), Arc::clone(&ip_addr_freq));
         },
         Err(_) => {
             println!("Failed to create logging file, logging disabled.");
@@ -30,10 +33,10 @@ fn main() {
 
 }
 
-fn make_log_file() -> Result<File, Error> {
+fn make_log_file(name: &str) -> Result<File, Error> {
     let mut log_iter = 1;
     loop {
-        match File::create_new(format!("easypotlog-{}.txt", log_iter)) {
+        match File::create_new(format!("{}-{}.txt", name, log_iter)) {
             Ok(f) => {
                 return Ok(f);
             },
@@ -49,12 +52,12 @@ fn make_log_file() -> Result<File, Error> {
     }
 }
 
-fn create_threads(listeners: Vec<TcpListener>, message_stack: Arc<Mutex<Vec<String>>>) {
+fn create_threads(listeners: Vec<TcpListener>, message_stack: Arc<Mutex<Vec<String>>>, ip_addr_freq: Arc<Mutex<HashMap<String, u32>>>) {
     for listener in listeners {
-        let m_stack_inter = Arc::clone(&message_stack);
+        let message_stack_arc = Arc::clone(&message_stack);
+        let ip_addr_freq_arc = Arc::clone(&ip_addr_freq);
         thread::spawn(move || {
 
-            let message_stack_arc = m_stack_inter;
             let port = listener.local_addr().unwrap().port();
 
             for stream in listener.incoming() {
@@ -80,6 +83,13 @@ fn create_threads(listeners: Vec<TcpListener>, message_stack: Arc<Mutex<Vec<Stri
                     .collect();
 
                 let mut message_stack = message_stack_arc.lock().unwrap();
+                let mut ip_addr_freq = ip_addr_freq_arc.lock().unwrap();
+
+                let ipcount = ip_addr_freq.entry(String::from(
+                    get_ip_str(&remote_ip)
+                )).or_insert(0);
+                *ipcount += 1;
+
                 message_stack.push(format!("Port: {} Remote IP: {}\n{data:#?}", port, remote_ip));
 
             }
@@ -105,10 +115,17 @@ fn read_no_file(message_stack_arc: Arc<Mutex<Vec<String>>>) {
     }
 }
 
-fn read_file(mut file: File, message_stack_arc: Arc<Mutex<Vec<String>>>) {
+/// Quickly becoming a little messy so documenting for later use.
+/// Takes in a File, and then a Result<File>
+/// Someone intelligent might make this function take in two results
+/// which would clean up main and reduce overall complexity
+/// and remove the need for two differnet reading functions branched in main
+/// I will not be doing that right now.
+fn read_file(mut file: File, mut ipfile: Result<File, Error>, message_stack_arc: Arc<Mutex<Vec<String>>>, ip_addr_freq_arc: Arc<Mutex<HashMap<String, u32>>>) {
     loop {
 
         let mut message_stack = message_stack_arc.lock().unwrap();
+        let ip_addr_freq = ip_addr_freq_arc.lock().unwrap();
 
         let message = message_stack.pop();
 
@@ -125,6 +142,16 @@ fn read_file(mut file: File, message_stack_arc: Arc<Mutex<Vec<String>>>) {
 
         if let Err(_) = res {
             println!("Failed to write a line to file!");
+        }
+
+        // PLEASE REWRITE THIS LOL
+
+        match ipfile {
+            Ok(ref mut f) => {
+                let _ = f.set_len(0);
+                let _ = f.write_all(format!("\n{ip_addr_freq:#?}").as_bytes());
+            },
+            Err(_) => (),
         }
 
     }
@@ -199,4 +226,17 @@ fn bind_to_ports(port_list: Vec<i32>) -> Vec<TcpListener> {
     }
 
     ret
+}
+
+fn get_ip_str(ip: &str) -> &str {
+    let mut i = 0;
+    for c in ip.chars() {
+        if c != ':' {
+            i += 1;
+        } else {
+            return &ip[0..i];
+        }
+    }
+
+    ip
 }
