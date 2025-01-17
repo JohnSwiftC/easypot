@@ -21,15 +21,7 @@ fn main() {
     let file = make_log_file("easypotlog");
     let ipfile = make_log_file("easypotfreq");
 
-    match file {
-        Ok(f) => {
-            read_file(f, ipfile, Arc::clone(&message_stack), Arc::clone(&ip_addr_freq));
-        },
-        Err(_) => {
-            println!("Failed to create logging file, logging disabled.");
-            read_no_file(Arc::clone(&message_stack));
-        },
-    }
+    read_file(file, ipfile, Arc::clone(&message_stack), Arc::clone(&ip_addr_freq));
 
 }
 
@@ -98,30 +90,7 @@ fn create_threads(listeners: Vec<TcpListener>, message_stack: Arc<Mutex<Vec<Stri
     }
 }
 
-fn read_no_file(message_stack_arc: Arc<Mutex<Vec<String>>>) {
-
-    loop {
-
-        let mut message_stack = message_stack_arc.lock().unwrap();
-        
-        let message = message_stack.pop();
-
-        let message = match message {
-            Some(val) => val,
-            None => continue,
-        };
-
-        println!("{}", message);
-    }
-}
-
-/// Quickly becoming a little messy so documenting for later use.
-/// Takes in a File, and then a Result<File>
-/// Someone intelligent might make this function take in two results
-/// which would clean up main and reduce overall complexity
-/// and remove the need for two differnet reading functions branched in main
-/// I will not be doing that right now.
-fn read_file(mut file: File, mut ipfile: Result<File, Error>, message_stack_arc: Arc<Mutex<Vec<String>>>, ip_addr_freq_arc: Arc<Mutex<HashMap<String, u32>>>) {
+fn read_file(mut file: Result<File, Error>, mut ipfile: Result<File, Error>, message_stack_arc: Arc<Mutex<Vec<String>>>, ip_addr_freq_arc: Arc<Mutex<HashMap<String, u32>>>) {
     loop {
 
         let mut message_stack = message_stack_arc.lock().unwrap();
@@ -134,17 +103,16 @@ fn read_file(mut file: File, mut ipfile: Result<File, Error>, message_stack_arc:
             None => continue,
         };
 
-        let res = file.write_all(
-            format!("{}\n\n", message).as_bytes()
-        );
-
         println!("{}", message);
 
-        if let Err(_) = res {
-            println!("Failed to write a line to file!");
+        match file {
+            Ok(ref mut f) => {
+                let _ = f.write_all(
+                    format!("{}\n\n", message).as_bytes()
+                );
+            },
+            Err(_) => (),
         }
-
-        // PLEASE REWRITE THIS LOL
 
         match ipfile {
             Ok(ref mut f) => {
